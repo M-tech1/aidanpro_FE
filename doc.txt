@@ -1,0 +1,444 @@
+# Multi-Tenant AI Call Agent — Complete Setup & Flow Document
+# (Based on actual codebase — frontend implementation)
+
+
+================================================================
+ACTORS IN THE SYSTEM
+================================================================
+
+| Actor           | Who They Are                              | Access                                                         |
+|-----------------|-------------------------------------------|----------------------------------------------------------------|
+| Super Admin     | Platform owner / operator                 | Full platform access — manages all tenants, numbers, monitoring|
+| Tenant Owner    | Company owner who signed up               | Full access to their company's settings                        |
+| Tenant Admin    | Staff added by the owner                  | Can edit settings, same as owner except cannot delete          |
+| Tenant Viewer   | Read-only staff member                    | Can view everything but cannot change anything                 |
+| Caller          | End customer who dials the phone          | Never logs in — only interacts via phone                       |
+
+
+================================================================
+PART 1 — AUTHENTICATION FLOW (ALL USERS)
+================================================================
+
+------------------------------------------------------------
+1.1 Sign Up (Self-Service — Tenant Owner)
+------------------------------------------------------------
+
+A new company registers at /auth/signup. The form collects:
+
+- Company Name (minimum 2 characters)
+- Timezone (dropdown — 20+ options, e.g. America/Toronto, America/New_York)
+- Industry (text field — free form at signup)
+- Email Address (validated format)
+- Password (minimum 8 characters, must include uppercase, lowercase, and a number)
+- Confirm Password
+
+On success, the user is logged in and lands on the Tenant Dashboard with a setup checklist.
+
+------------------------------------------------------------
+1.2 Login
+------------------------------------------------------------
+
+At /auth/login, users enter their email and password. The system:
+
+- Returns a JWT access token + refresh token
+- Identifies if the user is a Super Admin (routes them to /super-admin)
+- Identifies if the user is a Tenant user (routes them to /dashboard)
+- Persists the session in localStorage
+
+------------------------------------------------------------
+1.3 Forgot Password Flow
+------------------------------------------------------------
+
+Three-step process:
+
+1. /auth/forgot-password — Enter email address → system sends a code
+2. /auth/verify-otp — Enter the 6-digit code received by email
+3. /auth/reset-password — Enter email + new password + confirm password (minimum 6 characters)
+
+
+================================================================
+PART 2 — TENANT ONBOARDING FLOW (COMPANY SIDE)
+================================================================
+
+After signup or first login, the tenant lands on the Dashboard which displays a 3-step setup
+checklist. The checklist shows overall progress (e.g. "1/3 completed") and a visual progress bar.
+A "Go Live" badge appears only when all 3 steps are done AND the tenant account is in active status.
+
+------------------------------------------------------------
+Step 1 — Complete Company Profile
+------------------------------------------------------------
+
+The tenant goes to /dashboard/profile and fills in or updates:
+
+- Company Name
+- Industry — dropdown with 14 options:
+    Healthcare, Real Estate, Technology, Finance, Legal, Retail, Hospitality,
+    Education, Construction, Manufacturing, Insurance, Consulting, Non-profit, Other
+- Timezone — dropdown with 20+ timezone options
+- Email Recipients — comma-separated list of email addresses that will receive a call report
+    after every call (at least one required)
+
+The profile step is marked complete on the checklist once name, timezone, industry,
+and at least one email recipient are filled.
+
+Editing is restricted by role:
+- Owner and Admin can save changes
+- Viewers see read-only mode
+
+------------------------------------------------------------
+Step 2 — Get a Phone Number
+------------------------------------------------------------
+
+The tenant goes to /dashboard/phone-numbers to acquire a dedicated Twilio phone number.
+This is what callers will dial.
+
+How to buy a number:
+
+1. Click "Buy Number" — a search modal opens
+2. Select country (defaults to Canada — CA)
+3. Optionally enter an area code to search a specific region
+4. The system returns a list of available numbers with pagination
+5. Click "Purchase" next to any number
+6. The number is bought via Twilio, assigned to this tenant, and webhook routing is
+   configured automatically
+7. The number appears in the list with status Active
+
+The tenant can have multiple numbers. The list shows each number with:
+- Status (Active/Inactive)
+- Copy-to-clipboard button
+- Refresh button to reload the list
+
+The phone numbers step is marked complete on the checklist once at least 1 number is assigned.
+
+------------------------------------------------------------
+Step 3 — Configure the AI Agent
+------------------------------------------------------------
+
+The tenant goes to /dashboard/agent-config to configure how their AI agent behaves on every call.
+
+What can be configured:
+
+VOICE
+- Choose from a grid of available voices
+- Each voice has a preview button — plays an audio sample directly in the browser
+  so the tenant can hear it before selecting
+- There is a stop/play audio control
+
+TONE
+- Dropdown with 5 options: Professional, Friendly, Casual, Empathetic, Formal
+
+GREETING MESSAGE
+- Text area — what the agent says when a call is answered
+- Example: "Hi, thank you for calling Bright Smile Dental, how can I help you today?"
+
+SYSTEM PROMPT
+- Detailed text area — instructions that define the agent's behavior, what it should
+  and shouldn't do, how it handles edge cases
+
+PRIVACY & DATA SETTINGS
+- Store Transcripts — toggle on/off (default: on)
+- Store Recordings — toggle on/off (default: on)
+- Retention Period — number of days to keep data (1 to 365 days)
+  Only shown if transcripts or recordings are enabled
+
+ALLOWED ACTIONS (display only — managed by platform backend)
+- Shows which actions the agent is permitted to take:
+    create bookings, reschedule/cancel bookings, create leads,
+    create tickets, schedule meetings, handoff to human
+
+The agent config step is marked complete on the checklist once at least one of
+greeting, tone, or system prompt has been set.
+
+------------------------------------------------------------
+Go Live
+------------------------------------------------------------
+
+Once all 3 steps are complete and the tenant account is active, the "Go Live" badge
+appears on the dashboard. From this point:
+
+- Incoming calls to the purchased phone number are answered by the AI agent
+- After every call, the system sends a report email to all configured recipients
+- The report includes: call summary, transcript (if enabled), recording link (if enabled),
+  and the action outcome
+
+
+================================================================
+PART 3 — INTEGRATIONS SETUP (TENANT)
+================================================================
+
+Located at /dashboard/integrations. Connecting integrations allows the AI agent to take
+real actions during calls (not just collect information).
+
+------------------------------------------------------------
+Google Calendar
+------------------------------------------------------------
+
+1. Click "Connect" under Google Calendar
+2. The system starts an OAuth flow — the user is redirected to Google's authorization screen
+3. The user logs in with their Google account and grants permission
+4. Google redirects back to the portal with a success or error callback
+5. The portal shows the connection status (connected, with connection date and last test date)
+6. To disconnect: click "Disconnect" and confirm
+
+When connected, the AI agent can schedule meetings and calendar events during live calls.
+
+------------------------------------------------------------
+HubSpot
+------------------------------------------------------------
+
+1. Click "Connect" under HubSpot
+2. A form appears asking for a Private App Access Token
+   (obtained from HubSpot's developer settings)
+3. Paste the token and click Connect
+4. The system tests the connection and shows success or error
+5. Connection status is displayed with date connected
+6. To disconnect: click "Disconnect" and confirm
+
+When connected, the AI agent can create leads and contacts in HubSpot during live calls.
+
+------------------------------------------------------------
+When No Integrations Are Connected
+------------------------------------------------------------
+
+The agent still works fully. Instead of executing bookings or CRM entries directly,
+it collects the caller's details during the call and includes them in the post-call
+email so staff can follow up manually.
+
+
+================================================================
+PART 4 — SUPER ADMIN FLOW (PLATFORM OWNER)
+================================================================
+
+The Super Admin logs into the same login page but is routed to /super-admin after
+authentication. They have a separate navigation and access to all tenants on the platform.
+
+------------------------------------------------------------
+4.1 Platform Dashboard
+------------------------------------------------------------
+
+/super-admin shows the platform-wide overview:
+
+- 4 stat cards: Total tenants, total users, total phone numbers, total call volume
+- Tenant status breakdown: Active vs Suspended
+- System health status: "All Systems OK" or "Degraded" with component-level indicators
+- Top tenants by call count
+- Call analytics: Charts for last 7 days and last 30 days
+
+------------------------------------------------------------
+4.2 Creating a New Tenant
+------------------------------------------------------------
+
+At /super-admin/tenants, the Super Admin clicks "Create Tenant" which opens a modal with:
+
+- Company Name (required)
+- Owner Email (required — this becomes the tenant owner's login)
+- Owner Password (required, minimum 8 characters)
+- Industry (required)
+- Timezone (optional, defaults to America/Toronto)
+
+On submit, the system creates:
+- The tenant record in the database
+- The owner's user account tied to that tenant
+- The tenant starts in active status by default
+
+------------------------------------------------------------
+4.3 Managing Tenants
+------------------------------------------------------------
+
+The tenant list at /super-admin/tenants supports:
+
+- Search by company name or owner email
+- Filter by status: All, Active, Suspended, Inactive
+- Pagination (100 per page)
+- Click any tenant to open its detail page
+
+TENANT DETAIL PAGE (/super-admin/tenants/:tenantId):
+
+- Shows company name, industry, timezone, status
+- Usage metrics: Number of users by role, phone numbers (total/active), total calls
+- User list: All users on that tenant with their roles
+- Agent configuration summary: Current greeting, tone, transcript/recording settings
+- Status management:
+    - Activate the tenant
+    - Suspend the tenant (can add a reason note)
+- Delete tenant:
+    - Shows a dry-run preview before confirming
+    - Lists which users will be unlinked and which phone numbers will be removed
+    - Requires explicit confirmation
+
+------------------------------------------------------------
+4.4 Twilio Number Management
+------------------------------------------------------------
+
+At /super-admin/twilio, the Super Admin manages phone numbers across the entire platform.
+Two tabs:
+
+ALL NUMBERS TAB
+- Full list of every number on the platform
+- Shows: phone number, assigned tenant, status, country code
+- Filter by tenant or status
+
+UNASSIGNED NUMBERS TAB
+- Numbers purchased but not yet assigned to any tenant
+- Assign button opens a modal to enter the Tenant ID (UUID)
+- On assign, the system links the number and configures Twilio webhooks automatically
+
+RELEASE A NUMBER
+- Dry-run first: shows whether the number exists in Twilio and in the database
+- Confirm to release: removes from Twilio and unlinks from tenant
+
+------------------------------------------------------------
+4.5 Platform Monitoring
+------------------------------------------------------------
+
+At /super-admin/monitoring, three tabs give visibility into everything happening
+across the platform:
+
+CALLS TAB
+- Every call record across all tenants
+- Displays: Call SID, from/to numbers, direction (inbound/outbound), status,
+  duration, start/end time, which tenant it belongs to
+- Status values: Completed, Failed, Ringing, In-Progress, No-Answer, Busy
+- Filter by tenant ID, status, date range
+- Pagination (20 per page)
+
+EMAIL LOGS TAB
+- Every post-call email the system attempted to send
+- Displays: Email type, recipients, subject, status (sent/failed/pending),
+  error message if failed, associated call, timestamp
+- Filter by tenant, status, date range
+- Pagination (20 per page)
+
+RECORDINGS TAB
+- Every call recording across all tenants
+- Displays: Recording SID, status (available/processing/deleted/failed),
+  duration, storage URL, tenant
+- Pagination (20 per page)
+
+------------------------------------------------------------
+4.6 Super Admin Access Management
+------------------------------------------------------------
+
+At /super-admin/admins:
+
+- Grant access: Enter an email address — the user must already have an account in the system.
+  The system upgrades their access to Super Admin.
+- List all Super Admins: Shows email, user ID, and the date access was granted
+- Revoke access: Remove Super Admin status from any listed user
+
+
+================================================================
+PART 5 — WHAT HAPPENS DURING A LIVE CALL
+================================================================
+
+This is entirely backend-driven but triggered by the setup the tenant configured:
+
+1.  Caller dials the tenant's Twilio number
+2.  Twilio sends a webhook to the backend
+3.  Backend looks up which tenant owns that number
+4.  Backend loads that tenant's agent configuration
+    (greeting, tone, system prompt, allowed actions)
+5.  AI agent answers using the configured greeting
+6.  Conversation flows:
+    - Caller speaks
+    - Twilio ConversationRelay handles STT (speech to text)
+    - AI reasons and generates a response
+    - Twilio ConversationRelay handles TTS (text to speech)
+7.  If caller wants to book / schedule / create a lead:
+    - If the relevant integration is connected → action is executed directly
+    - If no integration is connected → details are collected and included in
+      the post-call email
+8.  If escalation is needed → call transfers to configured number
+9.  Call ends → transcript and recording are saved (if enabled per tenant settings)
+10. Post-call email is sent to all tenant email recipients containing:
+    - Caller number, call duration, timestamp
+    - Summary of the conversation
+    - Full transcript (if store transcripts is on)
+    - Recording link (if store recordings is on)
+    - What action was taken (booking created, lead captured,
+      email sent for manual follow-up, etc.)
+
+
+================================================================
+PART 6 — ROLES & PERMISSIONS SUMMARY
+================================================================
+
+| Feature                                    | Super Admin    | Tenant Owner/Admin  | Tenant Viewer       |
+|--------------------------------------------|----------------|---------------------|---------------------|
+| Create tenants                             | Yes            | No                  | No                  |
+| Suspend / delete tenants                   | Yes            | No                  | No                  |
+| Assign phone numbers to tenants            | Yes            | No                  | No                  |
+| Buy phone numbers (for own tenant)         | No             | Yes                 | No                  |
+| Edit company profile                       | No (view only) | Yes                 | No                  |
+| Configure AI agent                         | No (view only) | Yes                 | No                  |
+| Connect / disconnect integrations          | No             | Yes                 | No                  |
+| View call logs                             | All tenants    | Own tenant only     | Own tenant (read)   |
+| View monitoring (emails, recordings)       | All tenants    | Own tenant only     | Own tenant (read)   |
+| Grant Super Admin access                   | Yes            | No                  | No                  |
+| View platform analytics                    | Yes            | No                  | No                  |
+
+
+================================================================
+PART 7 — WHAT IS IMPLEMENTED VS. DISPLAY ONLY
+================================================================
+
+| Feature                                         | Status                                         |
+|-------------------------------------------------|------------------------------------------------|
+| Authentication (signup, login, password reset)  | Fully implemented                              |
+| Tenant profile management                       | Fully implemented                              |
+| AI agent config (voice, tone, prompts, privacy) | Fully implemented                              |
+| Phone number purchase and management            | Fully implemented                              |
+| Google Calendar integration (OAuth)             | Fully implemented                              |
+| HubSpot integration (token-based)               | Fully implemented                              |
+| Super admin tenant lifecycle (create/suspend/delete) | Fully implemented                         |
+| Phone number inventory and assignment           | Fully implemented                              |
+| Platform monitoring (calls, emails, recordings) | Fully implemented                              |
+| Super admin user management                     | Fully implemented                              |
+| Allowed Actions configuration                   | Display only — shown but managed by backend    |
+| Business hours configuration                    | In data model but no form in UI yet            |
+| Escalation rules configuration                  | In data model but no form in UI yet            |
+| SimplyBook integration                          | Not yet in UI                                  |
+| Zoom integration                                | Not yet in UI                                  |
+
+
+================================================================
+PART 8 — FULL USER JOURNEY SUMMARY
+================================================================
+
+PLATFORM OWNER (ONE-TIME SETUP)
+    └── Deploy backend (Render), database (Supabase), frontend (Vercel)
+    └── Configure Twilio account
+    └── Log in as Super Admin
+    └── Grant Super Admin access to team members if needed
+
+NEW COMPANY (TENANT) ONBOARDING
+    └── Sign up at /auth/signup (company name, timezone, industry, email, password)
+         OR Super Admin creates the tenant manually from /super-admin/tenants
+    └── Step 1: Complete company profile (name, industry, timezone, email recipients)
+    └── Step 2: Buy a phone number (search by country/area code, purchase from Twilio)
+    └── Step 3: Configure AI agent (pick a voice, set tone, write greeting + system prompt,
+                set privacy/retention preferences)
+    └── Optional: Connect integrations (Google Calendar via OAuth, HubSpot via token)
+    └── Go Live badge appears — agent is now answering calls
+
+CALLER EXPERIENCE
+    └── Dials the company's Twilio number
+    └── AI agent answers with the configured greeting
+    └── Conversation handled by AI (STT + LLM reasoning + TTS via Twilio ConversationRelay)
+    └── Action taken: book/lead/ticket/transfer (via connected integration or fallback to email)
+    └── Call ends → transcript + recording saved → report email sent to company recipients
+
+COMPANY ADMIN (DAY TO DAY)
+    └── View call logs, transcripts, recordings via dashboard
+    └── Update agent greeting, tone, or system prompt anytime
+    └── Add or remove email recipients for call reports
+    └── Connect a new integration or disconnect an existing one
+    └── Invite team members and assign roles (owner/admin/viewer)
+
+SUPER ADMIN (ONGOING PLATFORM MANAGEMENT)
+    └── Monitor all calls, emails, and recordings across every tenant
+    └── Create or suspend tenants as needed
+    └── Assign unassigned Twilio numbers to tenants
+    └── Release numbers from tenants that churn
+    └── View platform health, analytics, and call volume trends
+    └── Grant or revoke Super Admin access for team members

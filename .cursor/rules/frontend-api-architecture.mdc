@@ -1,0 +1,9 @@
+---
+alwaysApply: true
+---
+# Frontend API Architecture
+
+- Use a single backend base URL from `src/shared/config/appConfig.ts`.
+- Do not hardcode API hosts in feature code.
+- Call backend endpoints through feature API modules under `src/features/*/api`.
+- Reuse `src/shared/api/httpClient.ts` for request/response handling and auth header wiring.

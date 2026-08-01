@@ -1,0 +1,537 @@
+Technical Design Document 
+Multi-Tenant AI Call Agent (Python + Supabase + Twilio + React) 
+Deployment: Render or AWS 
+Goal: One resellable AI call agent platform that supports many companies (tenants), with 
+optional integrations (CRM, Google Calendar/Meet, SimplyBook, etc.), and strict per
+company data security. 
+1) What we are building 
+A platform where: 
+• Each company gets its own phone number (Twilio). 
+• Calls are handled by one backend (multi-tenant) written in Python. 
+• After each call, the system emails the company: 
+o call summary 
+o transcript 
+o call recording link (or attachment if preferred) 
+• Companies can optionally connect integrations (CRM, Calendar, SimplyBook). 
+2) High-level architecture 
+Components 
+1. Twilio (Telephony Layer) 
+• Inbound calls to tenant phone numbers 
+• Call recording 
+• Webhooks to your backend (call events, recording ready) 
+2. Python Backend (Agent + Orchestration Layer) 
+• Receives Twilio webhooks 
+• Resolves tenant based on the phone number 
+• Runs the conversation + decides actions 
+• Stores call data in Supabase 
+• Executes tools/integrations (if enabled for that tenant) 
+• Sends summary emails 
+3. Supabase (Data + Auth Layer) 
+• Postgres DB for tenants, calls, transcripts, tool connections, configs 
+• Auth for company users/admins 
+• Storage for transcripts and (optionally) recording copies 
+• Row Level Security (RLS) for strict tenant isolation 
+4. React UI (Admin Portal) 
+• Tenant onboarding and settings 
+• Connect integrations (OAuth/API keys) 
+• View calls, transcripts, recordings, outcomes 
+• Configure call flows and business rules 
+3) Multi-tenant model (one backend for all 
+companies) 
+You will deploy one backend service that serves many tenants safely. 
+Key rule 
+Every request is executed under exactly one tenant_id determined by: 
+• Twilio number → tenant mapping (for calls) 
+• Logged-in Supabase user → tenant membership (for UI) 
+This tenant_id is used to: 
+• load correct agent settings 
+• limit database queries 
+• load correct integration credentials 
+• store data in the correct “tenant scope” 
+4) Onboarding flow (Company setup end
+to-end) 
+Scenario A: New company onboarding 
+Goal: Provide them a number, configure agent, connect tools, go live. 
+Step 1 — Create tenant 
+In React Admin: 
+• Company name, timezone, industry 
+• Default email recipients for call reports 
+• Working hours and escalation rules 
+Step 2 — Buy or assign Twilio number 
+Two options: 
+Option 1 (recommended): You buy the number via Twilio API 
+• Admin clicks “Buy Number” 
+• Backend calls Twilio to purchase a number in the requested region 
+• Save purchased twilio_phone_number and twilio_sid in DB 
+Option 2: They bring their own number 
+• They forward/port to Twilio (later) 
+• You still map the inbound to your Twilio number/SIP 
+Step 3 — Configure Twilio webhooks 
+For that number, you set: 
+• Voice webhook URL: POST https://<backend>/twilio/voice/inbound 
+• Recording status callback: POST 
+https://<backend>/twilio/voice/recording 
+Step 4 — Select “Agent Pack” (industry template) 
+In UI they pick: 
+• Healthcare, Real Estate, Tech Support, Sales, etc. 
+An Agent Pack defines: 
+• greeting / tone 
+• what the agent is allowed to do 
+• what questions to ask 
+• escalation rules 
+• default “actions” (booking vs lead capture etc.) 
+Step 5 — Integrations selection (optional) 
+In UI they toggle integrations: 
+• CRM (HubSpot/Salesforce/etc.) 
+• Google Calendar/Meet 
+• SimplyBook 
+• Other tools later 
+For each integration: 
+• Connect via OAuth (preferred) OR enter API key 
+• Test connection 
+• Save credentials encrypted and scoped to tenant 
+Step 6 — Go Live 
+• Number is active 
+• Calls start routing to correct tenant agent 
+• Call reports go to tenant emails 
+5) Call handling flow (Inbound) 
+Scenario: Caller calls Tenant B’s Twilio number 
+1. Twilio triggers webhook: /twilio/voice/inbound 
+2. Backend verifies: 
+• Twilio signature is valid (prevents spoofing) 
+3. Backend resolves tenant: 
+• tenant_id = lookup(phone_number_called) 
+4. Backend loads tenant configuration: 
+• allowed actions 
+• connected tools 
+• business hours rules 
+• email recipients 
+5. Conversation starts: 
+• capture speech (STT) 
+• generate response (LLM) 
+• speak back (TTS) 
+• keep history + extracted fields 
+6. During the call, the agent may need an action: 
+• e.g., schedule booking, create lead, create ticket 
+Action routing rule 
+• If the tenant has the integration enabled → execute it 
+• If not enabled → fallback flow (collect details + email staff) 
+7. After call ends: 
+• store transcript and structured data 
+• Twilio recording callback arrives when ready 
+• backend emails: summary + transcript + recording link 
+6) Tool/Integration strategy (how to 
+support different platforms) 
+Core concept: “Actions” + “Connectors” 
+Your agent never calls “SimplyBook” directly in the conversation logic. 
+Instead, the agent requests a generic action: 
+• create_booking 
+• reschedule_booking 
+• cancel_booking 
+• create_lead 
+• create_ticket 
+• schedule_meeting (Google Calendar + Meet) 
+• handoff_to_human 
+Then your backend routes that action to the correct connector based on tenant config. 
+Example 
+• Tenant A: 
+o create_booking → SimplyBook connector 
+• Tenant B: 
+o no booking connector 
+o create_booking → fallback (booking request email) 
+This keeps the product resellable without rewriting agent logic. 
+7) How number maps to the correct agent 
+(critical) 
+Mapping approach 
+• Each Twilio number is stored in phone_numbers table with: 
+o phone_number (E.164) 
+o twilio_number_sid 
+o tenant_id 
+o status (active/inactive) 
+Runtime mapping 
+When Twilio hits /twilio/voice/inbound, you use To number: 
+• tenant_id = SELECT tenant_id FROM phone_numbers WHERE 
+phone_number = To 
+That tenant_id becomes the fixed context for: 
+• retrieving prompts / policies 
+• saving data 
+• choosing tools 
+• sending emails 
+8) Data security (how each company stays 
+isolated) 
+Security is enforced at multiple layers. This is not “prompt-based”; it is hard isolation. 
+A) Supabase Row Level Security (RLS) 
+All tenant data tables include tenant_id. 
+RLS ensures: 
+• a company user only reads rows where tenant_id = their tenant 
+• writes are automatically scoped to the same tenant 
+B) Service vs User access 
+• Backend uses Supabase service role key (server-only). 
+• React UI uses Supabase Auth with user tokens (client-side). 
+• React users never get access to other tenants due to RLS. 
+C) Storage isolation (recordings, transcripts, exports) 
+• Store files in per-tenant folders: tenants/{tenant_id}/... 
+• Use signed URLs for access 
+• Optionally require portal login to view recordings 
+D) Credential isolation (tools/integrations) 
+Integration tokens/keys are stored: 
+• encrypted 
+• tied to tenant_id 
+• never reused across tenants 
+• only loaded when current call is in that tenant context 
+If Tenant B does not connect tools, there are no credentials to misuse. 
+E) Strict action permissions 
+Per tenant “Allowed Actions” prevents tool usage: 
+• even if the caller asks 
+• even if the LLM “wants” to do it 
+Backend must enforce: 
+• if disabled → deny tool execution and use fallback 
+F) Logging and privacy controls 
+Per tenant settings: 
+• store transcript yes/no 
+• store recording yes/no 
+• retention period (e.g., 30/90 days) 
+• redact sensitive values from logs (phone/email etc.) 
+9) Supabase data model (simple but 
+complete) 
+Core tables 
+1. tenants 
+• id, name, timezone, industry, status 
+2. tenant_users 
+• tenant_id, user_id, role (owner/admin/agent) 
+3. phone_numbers 
+• tenant_id, phone_number, twilio_sid, active 
+4. agent_packs 
+• id, name, default_rules, default_prompts (templates) 
+5. tenant_agent_config 
+• tenant_id 
+• greeting, tone, business_hours, escalation_rules 
+• allowed_actions (json) 
+6. calls 
+• tenant_id, call_sid, from_number, to_number 
+• start/end time, status, outcome 
+• extracted_fields (json) 
+7. call_messages (conversation turns) 
+• tenant_id, call_id 
+• speaker (caller/agent) 
+• text, timestamp 
+8. recordings 
+• tenant_id, call_id 
+• twilio_recording_sid, recording_url 
+• duration, created_at 
+9. integrations 
+• tenant_id 
+• type (simplybook/google_calendar/crm) 
+• status, connected_at 
+10. 
+integration_credentials 
+• tenant_id, integration_id 
+• encrypted_blob (server only) 
+• refresh_token fields if OAuth 
+11. booking_requests (fallback) 
+• tenant_id, call_id 
+• requested_time, service, caller_details, status 
+12. 
+email_logs 
+• tenant_id, call_id 
+• recipients, status, sent_at 
+10) React Admin Portal features 
+Tenant admin 
+• Create / update company profile 
+• Buy/assign Twilio number 
+• Configure call recording on/off 
+• Configure email recipients 
+• Business hours & escalation 
+• Choose Agent Pack and edit scripts 
+Integrations 
+• Connect/disconnect each integration 
+• Test connection 
+• Map actions: 
+o create_booking → SimplyBook 
+o schedule_meeting → Google Calendar 
+o create_lead → CRM 
+Monitoring 
+• Call logs with filters 
+• Transcript viewer 
+• Recording playback (via signed link) 
+• Outcomes + lead/booking results 
+11) Email delivery design 
+After every call, send an email to tenant recipients containing: 
+• call metadata (caller number, duration, time) 
+• summary bullets 
+• transcript 
+• recording link (signed URL or Twilio recording link) 
+• action result (booking created / lead created / booking request) 
+If integration fails: 
+• email includes error + fallback details 
+• booking request is created so nothing is lost 
+12) Deployment (Render or AWS) 
+Render (fastest) 
+• Python backend as a web service 
+• React UI hosted on Render or any static hosting 
+• Supabase hosted (managed) 
+AWS (more control) 
+• Backend on ECS/Fargate or EC2 
+• React UI on S3 + CloudFront 
+• Secrets in AWS Secrets Manager 
+• Optional WAF / private networking 
+In both cases 
+• Keep Twilio webhooks public 
+• Protect with Twilio signature validation 
+• Store secrets securely (Render env vars or AWS Secrets) 
+13) Operational safeguards (so it’s reliable 
+to resell) 
+Fallback-first rule 
+Calls must never “break” due to integrations. 
+If a tool is slow/down: 
+• agent collects details 
+• creates internal request record 
+• emails staff 
+• optionally retries integration after call 
+Human escalation options 
+Per tenant: 
+• transfer to staff number during office hours 
+• voicemail after hours 
+• SMS/email alert for urgent intents 
+Versioning of agent configs 
+Keep versions so you can: 
+• roll back changes 
+• audit what prompt/rules were active for a call 
+14) Summary of how “one backend” stays 
+secure 
+Even with one shared backend: 
+• Tenant is determined by the called Twilio number 
+• Every table row contains tenant_id 
+• Supabase RLS prevents cross-tenant access in UI 
+• Backend enforces action permissions and loads only tenant-scoped credentials 
+• Storage paths and links are tenant-scoped and signed 
+• Integrations are isolated per tenant (encrypted tokens per tenant) 
+
+Voice AI System 
+1. Overview 
+This document describes the pricing model, deployment setup, and delivery milestones 
+for a multi-tenant Voice AI Call Agent platform built with: 
+• Python (Flask) 
+• Supabase (Postgres, Auth, Storage) 
+• Twilio (Telephony + ConversationRelay) 
+• React (Admin Portal) 
+• Deployment on Render 
+The platform is designed to be resellable, secure, and extensible with optional 
+integrations (CRM, scheduling, meetings). 
+2. LLM Pricing (Text-Only Usage) 
+The system uses an LLM only for text reasoning and decision-making. 
+• Speech-to-Text (STT) and Text-to-Speech (TTS) are handled entirely by Twilio via 
+ConversationRelay 
+• No OpenAI audio models are used 
+OpenAI — GPT-5.2 
+Input Tokens 
+• Standard input: $1.750 / 1M tokens 
+• Cached input: $0.175 / 1M tokens 
+Output Tokens 
+• Output tokens: $14.000 / 1M tokens 
+3. Telephony & Voice Costs (Canada) 
+Twilio — Phone Number 
+• Canadian local number: $1.15 / month 
+Twilio Voice Usage (Inbound Calls – Canada) 
+ConversationRelay is used and already includes STT + TTS. 
+No Twilio transcription or OpenAI audio services are required. 
+Component 
+Inbound call (local) 
+Cost / min 
+$0.0085 
+ConversationRelay (STT + TTS included) $0.0700 
+Call recording 
+$0.0025 
+Twilio total 
+$0.0810 / min 
+4. UI Deployment (Admin Portal) 
+Vercel 
+The React Admin Portal is used only by internal admins and tenant administrators. 
+It is not a public-facing application. 
+Deployment Approach 
+• The Admin UI will be deployed on Vercel Hobby Plan. 
+• Suitable because: 
+o Low traffic (admin-only usage) 
+o No public SEO or high-bandwidth requirements 
+o Fast global CDN and simple CI integration 
+5. Backend Deployment 
+Render 
+Render is used to deploy the Python backend service (API + WebSocket server) that 
+powers the voice agent. 
+• Standard instance: $25 / month 
+o Used for the production backend service 
+Team Access / Collaboration 
+Render separates instance pricing from team collaboration. 
+• Team / collaborator plan: $19 / month 
+o Required only if collaborators need access via their own Render accounts 
+Two available options: 
+1. Share account credentials 
+a. No need to purchase the $19/month team plan 
+2. Upgrade Render team plan (recommended) 
+a. Cleaner access control 
+b. Better for long-term maintenance and scaling 
+6.  Scheduling & Meeting Integrations 
+Some organizations may want the voice agent to schedule bookings or meetings, not only 
+answer calls. 
+Supported Tools (You can choose 2 tools which you want me to integrate 
+with the agent to schedule bookings, meetings etc) 
+• SimplyBook.me 
+• Google Calendar 
+• Google Meet 
+• Zoom 
+• SendGrid for Emails 
+• HubSpot  
+Recommended Architecture (Clean Approach) 
+• Deploy each integration as a separate MCP server 
+• Configure the Python client to connect to multiple MCP servers simultaneously 
+Benefits 
+• Clear separation of concerns 
+• Easier maintenance and scaling 
+• Each service can be updated independently 
+Alternative (Cost-Saving Approach) 
+• Merge multiple integrations into one server codebase 
+• Recommended only if services are tightly coupled 
+• Reduces infrastructure cost but increases code complexity 
+7. Cost Summary 
+• Twilio voice cost (Canada, inbound): $0.0810 / min 
+• LLM cost: token-based (GPT-5.2 pricing above) 
+• Phone number: $1.15 / month 
+• Backend hosting: $25 / month (Render instance) 
+• Optional Render team plan: $19 / month 
+• STT/TTS: fully handled by Twilio ConversationRelay 
+8. Delivery Plan – 4 Milestones (2 Months) 
+Total Duration: ~8 weeks 
+Total Budget: $2,300 
+�
+� Milestone 1 — Core Foundation, CI/CD & Secure Deployment 
+Timeline: Week 1–2 
+Budget: $550 
+Scope 
+Establishes a secure, production-ready foundation with automated deployment. 
+Deliverables 
+Backend & Infrastructure 
+• Python (Flask) backend structure 
+• Environment configuration (dev / prod) 
+• Secure secrets management (Render env vars) 
+• Twilio webhook signature validation 
+Supabase Setup 
+• Supabase project initialization 
+• Core schema (tenants, users, phone_numbers) 
+• Row Level Security (RLS) foundation 
+• Service-role vs user-role separation 
+CI/CD & Deployment 
+• Git repository setup 
+• CI/CD pipeline (auto-deploy on main branch) 
+• Backend deployed on Render 
+• Health checks and logging 
+Outcome 
+• Live backend endpoint 
+• Automated deployments 
+• Secure multi-tenant foundation 
+�
+� Milestone 2 — Multi-Tenant Call Handling & Data Layer 
+Timeline: Week 3–4 
+Budget: $600 
+Scope 
+Implements inbound call handling, tenant resolution, and call data persistence. 
+Deliverables 
+Twilio Integration 
+• Inbound call webhook (/twilio/voice/inbound) 
+• Call recording enabled 
+• Recording status callback handler 
+• Twilio number → tenant mapping 
+Call Flow Engine 
+• Tenant resolution via called number 
+• Tenant-scoped configuration loading 
+• Conversation loop (STT/TTS via Twilio) 
+• Call lifecycle handling 
+Data Storage 
+• Calls, messages, recordings tables 
+• Transcript storage 
+• Per-tenant storage paths 
+• Retention flags (store transcript / recording yes/no) 
+Outcome 
+• One backend safely serving many tenants 
+• Calls routed, recorded, and stored per company 
+�
+� Milestone 3 — Agent Logic, Actions & Integrations Framework 
+Timeline: Week 5–6 
+Budget: $600 
+Scope 
+Builds the resellable intelligence layer and integration framework. 
+Deliverables 
+Agent Packs 
+• Industry-based Agent Pack model 
+• Tenant-specific agent configuration 
+• Allowed actions enforcement (backend-level) 
+Actions & Connectors 
+• Generic action system: 
+o create_booking 
+o schedule_meeting 
+o create_lead 
+o create_ticket 
+o handoff_to_human 
+• Connector routing based on tenant configuration 
+• Fallback flows when integrations are disabled 
+Integrations (Initial Set) 
+• Google Calendar / Google Meet 
+• SimplyBook.me 
+• CRM lead creation 
+• Encrypted, tenant-scoped credential storage 
+Outcome 
+• One agent logic reusable across industries 
+• Integrations enabled/disabled without code changes 
+�
+� Milestone 4 — Admin Portal, Email Workflows & Operational 
+Safeguards 
+Timeline: Week 7–8 
+Budget: $550 
+Scope 
+Completes the platform with admin UI, reporting, and operational reliability. 
+Deliverables 
+React Admin Portal 
+• Tenant onboarding 
+• Twilio number assignment 
+• Agent Pack selection and editing 
+• Integration connect/disconnect 
+• Business hours & escalation rules 
+Monitoring & Reporting 
+• Call logs with filters 
+• Transcript viewer 
+• Recording playback via signed URLs 
+• Call outcome tracking 
+Email Automation 
+• Post-call emails with: 
+o call summary 
+o transcript 
+o recording link 
+o action result 
+• Failure notifications and fallback reporting 
+Operational Safeguards 
+• Fallback-first execution rules 
+• Integration failure handling 
+• Human escalation options 
+• Agent configuration versioning (audit & rollback) 
+Outcome 
+• Fully usable, resellable platform 
+• Tenant self-service configuration 
+• Reliable operation under real-world conditions 
+8. Budget Summary 
+Milestone Budget 
+Milestone 1 $550 
+Milestone 2 $600 
+Milestone 3 $600 
+Milestone 4 $550 
+Total 
+$2,300 
+9. References 
+• Twilio Voice Pricing (Canada): 
+https://www.twilio.com/en-us/voice/pricing/ca 
+• Twilio Phone Numbers: 
+https://www.twilio.com/en-us/phone-numbers 
+• OpenAI API Pricing: 
+https://openai.com/api/pricing/ 
+• Vercel Pricing: 
+https://vercel.com/pricing/ 
+• Render Pricing: 
+https://render.com/pricing/ 
