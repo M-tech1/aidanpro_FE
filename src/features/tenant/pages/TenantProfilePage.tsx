@@ -48,23 +48,241 @@ const TIMEZONES = [
   "Pacific/Auckland",
 ];
 
-const INDUSTRIES = [
-  "Healthcare",
-  "Real Estate",
-  "Technology",
-  "Perfumery",
-  "Finance & Banking",
-  "Legal Services",
-  "Retail & E-commerce",
-  "Hospitality & Tourism",
-  "Education",
-  "Construction",
-  "Manufacturing",
-  "Insurance",
-  "Consulting",
-  "Non-profit",
-  "Other",
-];
+const INDUSTRIES: Record<string, string[]> = {
+  "Plumbing & Water Systems": [
+    "Plumbing Services",
+    "Drain Cleaning",
+    "Septic Services",
+    "Water Tank Cleaning",
+    "Water Treatment",
+    "Borehole Services",
+    "Plumbing Supplies",
+    "Irrigation Services",
+  ],
+  "Electrical & Power": [
+    "Electrical Services",
+    "Electrical Supplies",
+    "Generator Services",
+    "Generator Repair",
+    "Solar Installation",
+    "Solar Maintenance",
+    "Outdoor Lighting",
+  ],
+  "HVAC & Climate Control": [
+    "HVAC Services",
+    "Air Conditioning Services",
+    "Heating Services",
+  ],
+  "Appliance Repair": [
+    "Appliance Repair",
+    "Refrigerator Repair",
+    "Washing Machine Repair",
+  ],
+  "Roofing & Exterior": [
+    "Roofing Services",
+    "Gutter Services",
+    "Chimney Services",
+  ],
+  "Construction & Structural": [
+    "Masonry",
+    "Bricklaying",
+    "Concrete Services",
+    "Welding Services",
+    "Building Maintenance",
+    "Facility Maintenance",
+    "Construction Equipment Rental",
+  ],
+  "Renovation & Remodeling": [
+    "Interior Renovation",
+    "Kitchen Remodeling",
+    "Bathroom Remodeling",
+    "Home Remodeling",
+    "Flooring Services",
+    "Tiling Services",
+    "Painting Services",
+    "Driveway Installation",
+  ],
+  "Carpentry, Windows & Doors": [
+    "Carpentry",
+    "Woodworking",
+    "Glass Installation",
+    "Window Installation",
+    "Door Installation",
+    "Fence Installation",
+    "Gate Installation",
+  ],
+  "Security & Smart Home": [
+    "Locksmith Services",
+    "Home Security Installation",
+    "CCTV Installation",
+    "Alarm System Installation",
+    "Smart Home Installation",
+    "Home Automation",
+    "Security Guard Services",
+  ],
+  "Cleaning Services": [
+    "Home Cleaning",
+    "Deep Cleaning",
+    "Carpet Cleaning",
+    "Upholstery Cleaning",
+    "Window Cleaning",
+    "Pressure Washing",
+  ],
+  "Pest Control": ["Pest Control", "Fumigation Services", "Pest Inspection"],
+  "Lawn, Garden & Pool": [
+    "Lawn Care",
+    "Lawn Mowing",
+    "Landscaping",
+    "Gardening Services",
+    "Tree Trimming",
+    "Tree Removal",
+    "Pool Maintenance",
+    "Pool Cleaning",
+    "Garden Equipment Services",
+  ],
+  "Interior Design & Décor": [
+    "Interior Decoration",
+    "Home Staging",
+    "Upholstery Services",
+    "Curtain Installation",
+    "Blinds Installation",
+    "Furniture Assembly",
+    "Furniture Repair",
+  ],
+  "Property & Home Management": [
+    "Property Maintenance",
+    "Handyman Services",
+    "Home Inspection",
+    "Property Valuation",
+    "Property Management",
+    "Home Equipment Rental",
+    "Moving Services",
+  ],
+  "Domestic & Care Services": [
+    "Domestic Staffing",
+    "Housekeeping Services",
+    "Babysitting Services",
+    "Elderly Care Services",
+    "Pet Care Services",
+    "Pet Grooming",
+    "Waste Collection",
+    "Recycling Services",
+  ],
+  "Automotive Services": [
+    "Mobile Car Wash",
+    "Auto Detailing",
+    "Car Repair",
+    "Tire Services",
+    "Auto Electrical Services",
+    "Car Air Conditioning",
+    "Motorcycle Repair",
+  ],
+  "Retail & Consumer Goods": [
+    "Perfumery & Fragrances",
+    "Boutique / Clothing Store",
+    "Shoe Store",
+    "Jewelry Store",
+    "Gift Shop",
+    "Bookstore",
+    "Electronics Store",
+    "Furniture Store",
+    "Grocery Store",
+    "Convenience Store",
+  ],
+  "Beauty & Personal Care": [
+    "Hair Salon",
+    "Barbershop",
+    "Nail Salon",
+    "Spa & Wellness",
+    "Makeup Artistry",
+    "Tattoo & Piercing Studio",
+    "Tailoring & Alterations",
+    "Dry Cleaning & Laundry",
+  ],
+  "Health & Wellness": [
+    "Medical Clinic",
+    "Dental Clinic",
+    "Physiotherapy",
+    "Fitness Studio / Gym",
+    "Yoga Studio",
+    "Nutrition & Dietetics",
+    "Veterinary Services",
+    "Pharmacy",
+  ],
+  "Food & Hospitality": [
+    "Restaurant",
+    "Café & Coffee Shop",
+    "Catering Services",
+    "Bakery",
+    "Food Truck",
+    "Bar & Lounge",
+    "Hotel & Bed and Breakfast",
+    "Event Venue Rental",
+  ],
+  "Professional & Creative Agencies": [
+    "Boutique Agency / Consulting Firm",
+    "Marketing Agency",
+    "Advertising Agency",
+    "Branding & Design Agency",
+    "Public Relations Agency",
+    "Social Media Management",
+    "Photography Services",
+    "Videography Services",
+    "Web Design & Development",
+    "Recruitment Agency",
+    "Travel Agency",
+  ],
+  "Finance, Legal & Consulting": [
+    "Accounting & Bookkeeping",
+    "Legal Services",
+    "Business Consulting",
+    "Tax Preparation",
+    "Financial Advisory",
+    "Insurance Agency",
+    "Notary Services",
+  ],
+  "Real Estate Services": [
+    "Real Estate Agency",
+    "Property Sales",
+    "Mortgage & Loan Services",
+    "Property Valuation Services",
+  ],
+  "Education & Training": [
+    "Tutoring Services",
+    "Language School",
+    "Driving School",
+    "Vocational Training",
+    "Daycare & Preschool",
+  ],
+  "Events & Entertainment": [
+    "Event Planning",
+    "Wedding Planning",
+    "DJ & Entertainment Services",
+    "Party Rental Services",
+  ],
+  "Technology & IT Services": [
+    "IT Support Services",
+    "Software Development",
+    "Computer & Phone Repair",
+    "Cybersecurity Services",
+    "Telecom Services",
+  ],
+  "Logistics & Delivery": [
+    "Courier Services",
+    "Freight & Trucking",
+    "Packaging & Shipping Services",
+  ],
+};
+
+const UNMATCHED_INDUSTRY_CATEGORY = "Current Selection";
+
+function findIndustryCategory(industry: string | undefined | null): string {
+  if (!industry) return "";
+  for (const [category, subIndustries] of Object.entries(INDUSTRIES)) {
+    if (subIndustries.includes(industry)) return category;
+  }
+  return "";
+}
 
 const IconEdit = () => (
   <svg
@@ -115,13 +333,33 @@ export function TenantProfilePage() {
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [industryCategory, setIndustryCategory] = useState("");
 
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<ProfileFormValues>({ resolver: zodResolver(profileSchema) });
+
+  // Options for the sub-industry select. Falls back to a synthetic category
+  // so a legacy/unrecognized industry value stays visible instead of
+  // silently disappearing from the dropdown.
+  const industrySubOptions =
+    industryCategory === UNMATCHED_INDUSTRY_CATEGORY
+      ? [profile?.tenant.industry ?? ""]
+      : (INDUSTRIES[industryCategory] ?? []);
+
+  const industryCategoryOptions =
+    industryCategory === UNMATCHED_INDUSTRY_CATEGORY
+      ? [UNMATCHED_INDUSTRY_CATEGORY, ...Object.keys(INDUSTRIES)]
+      : Object.keys(INDUSTRIES);
+
+  const handleIndustryCategoryChange = (category: string) => {
+    setIndustryCategory(category);
+    setValue("industry", "");
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -139,6 +377,10 @@ export function TenantProfilePage() {
           default_email_recipients:
             cached.tenant.default_email_recipients.join(", "),
         });
+        setIndustryCategory(
+          findIndustryCategory(cached.tenant.industry) ||
+            (cached.tenant.industry ? UNMATCHED_INDUSTRY_CATEGORY : ""),
+        );
         setProfile(cached);
         setLoading(false);
         return;
@@ -159,6 +401,10 @@ export function TenantProfilePage() {
           default_email_recipients:
             data.tenant.default_email_recipients.join(", "),
         });
+        setIndustryCategory(
+          findIndustryCategory(data.tenant.industry) ||
+            (data.tenant.industry ? UNMATCHED_INDUSTRY_CATEGORY : ""),
+        );
         setProfile(data);
       } catch (err) {
         if (isAbortError(err)) return;
@@ -218,6 +464,10 @@ export function TenantProfilePage() {
       default_email_recipients:
         profile.tenant.default_email_recipients.join(", "),
     });
+    setIndustryCategory(
+      findIndustryCategory(profile.tenant.industry) ||
+        (profile.tenant.industry ? UNMATCHED_INDUSTRY_CATEGORY : ""),
+    );
   };
 
   if (loading) {
@@ -442,14 +692,38 @@ export function TenantProfilePage() {
                 </div>
 
                 <div className="form-field">
+                  <label htmlFor="industry_category">Industry Category</label>
+                  <select
+                    id="industry_category"
+                    className="form-field-select"
+                    value={industryCategory}
+                    onChange={(e) =>
+                      handleIndustryCategoryChange(e.target.value)
+                    }
+                  >
+                    <option value="">Select category…</option>
+                    {industryCategoryOptions.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-field">
                   <label htmlFor="industry">Industry</label>
                   <select
                     id="industry"
                     className="form-field-select"
+                    disabled={!industryCategory}
                     {...register("industry")}
                   >
-                    <option value="">Select industry…</option>
-                    {INDUSTRIES.map((ind) => (
+                    <option value="">
+                      {industryCategory
+                        ? "Select industry…"
+                        : "Select a category first…"}
+                    </option>
+                    {industrySubOptions.map((ind) => (
                       <option key={ind} value={ind}>
                         {ind}
                       </option>
